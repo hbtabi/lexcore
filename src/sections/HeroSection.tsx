@@ -22,6 +22,11 @@ export default function HeroSection() {
   const blob2Ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    try {
+      ScrollTrigger.getAll().forEach(t => {
+        if (t.vars.trigger === "#hero" || t.trigger?.id === "hero") t.kill();
+      });
+    } catch {}
     const heroContent = document.querySelector("#hero-content") as HTMLElement;
     const handleMouseMove = (e: MouseEvent) => {
       if (!heroContent) return;
@@ -33,79 +38,75 @@ export default function HeroSection() {
     };
     window.addEventListener("mousemove", handleMouseMove);
 
-    const ctx = gsap.context(() => {
-      ScrollTrigger.create({
-        trigger: "#hero",
-        start: "top top",
-        end: "+=600",
-        pin: true,
-        pinSpacing: false,
+    let ctx: gsap.Context | undefined;
+    try {
+      ctx = gsap.context(() => {
+        const tl = gsap.timeline();
+
+        tl.fromTo(
+          [line0Ref.current, line1Ref.current, line2Ref.current],
+          { yPercent: 130, opacity: 0 },
+          {
+            ease: "power4.out",
+            yPercent: 0,
+            opacity: 1,
+            duration: 1.6,
+            stagger: 0.1,
+          }
+        );
+
+        tl.fromTo(
+          [subRef.current, bodyRef.current],
+          { opacity: 0, y: 30 },
+          { opacity: 1, y: 0, duration: 0.8, ease: "power2.out", stagger: 0.15 },
+          "-=0.6"
+        );
+
+        tl.fromTo(
+          ctaRef.current,
+          { opacity: 0, y: 20 },
+          { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" },
+          "-=0.3"
+        );
+
+        gsap.to("#hero-content", {
+          opacity: 0,
+          filter: "blur(12px)",
+          scale: 0.97,
+          scrollTrigger: {
+            trigger: "#hero",
+            start: "top top",
+            end: "+=500",
+            scrub: 1.2,
+          },
+        });
+
+        gsap.to(glowRef.current, {
+          scale: 1.8,
+          opacity: 0.2,
+          scrollTrigger: {
+            trigger: "#hero",
+            start: "top top",
+            end: "+=400",
+            scrub: 1.5,
+          },
+        });
+
+        gsap.to(blob1Ref.current, {
+          y: -80, x: 40, opacity: 0.6,
+          scrollTrigger: { trigger: "#hero", start: "top top", end: "+=300", scrub: 1 },
+        });
+
+        gsap.to(blob2Ref.current, {
+          y: 60, x: -30, opacity: 0.5,
+          scrollTrigger: { trigger: "#hero", start: "top top", end: "+=300", scrub: 1 },
+        });
       });
-
-      const tl = gsap.timeline();
-
-      tl.fromTo(
-        [line0Ref.current, line1Ref.current, line2Ref.current],
-        { yPercent: 130, opacity: 0 },
-        {
-          ease: "power4.out",
-          yPercent: 0,
-          opacity: 1,
-          duration: 1.6,
-          stagger: 0.1,
-        }
-      );
-
-      tl.fromTo(
-        [subRef.current, bodyRef.current],
-        { opacity: 0, y: 30 },
-        { opacity: 1, y: 0, duration: 0.8, ease: "power2.out", stagger: 0.15 },
-        "-=0.6"
-      );
-
-      tl.fromTo(
-        ctaRef.current,
-        { opacity: 0, y: 20 },
-        { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" },
-        "-=0.3"
-      );
-
-      gsap.to("#hero-content", {
-        opacity: 0,
-        filter: "blur(12px)",
-        scale: 0.97,
-        scrollTrigger: {
-          trigger: "#hero",
-          start: "top top",
-          end: "+=500",
-          scrub: 1.2,
-        },
-      });
-
-      gsap.to(glowRef.current, {
-        scale: 1.8,
-        opacity: 0.2,
-        scrollTrigger: {
-          trigger: "#hero",
-          start: "top top",
-          end: "+=400",
-          scrub: 1.5,
-        },
-      });
-
-      gsap.to(blob1Ref.current, {
-        y: -80, x: 40, opacity: 0.6,
-        scrollTrigger: { trigger: "#hero", start: "top top", end: "+=300", scrub: 1 },
-      });
-
-      gsap.to(blob2Ref.current, {
-        y: 60, x: -30, opacity: 0.5,
-        scrollTrigger: { trigger: "#hero", start: "top top", end: "+=300", scrub: 1 },
-      });
-    }, sectionRef);
+    } catch {}
 
     return () => {
-      ctx.revert();
+      try { ctx?.revert(); } catch {}
+      try { ScrollTrigger.getAll().forEach(t => { if (t.trigger && !document.body.contains(t.trigger)) t.kill(); }); } catch {}
       window.removeEventListener("mousemove", handleMouseMove);
     };
   }, []);

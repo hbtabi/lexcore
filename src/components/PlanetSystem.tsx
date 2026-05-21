@@ -8,7 +8,7 @@ const planets = [
   { name: "CIVIL", r: 85, color: "#F97316", speed: 0.08 },
 ];
 
-export default function PlanetSystem({ active, relevantAreas }: { active: boolean; relevantAreas: string[] }) {
+export default function PlanetSystem({ active, relevantAreas = [] }: { active: boolean; relevantAreas?: string[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
 

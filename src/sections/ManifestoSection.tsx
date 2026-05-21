@@ -9,47 +9,58 @@ export default function ManifestoSection() {
   const quoteRef = useRef<HTMLQuoteElement>(null);
 
   useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        "#manifesto-content",
-        { opacity: 0, y: 50 },
-        {
-          opacity: 1, y: 0, duration: 1.2, ease: "power3.out",
-          scrollTrigger: {
-            trigger: "#manifesto",
-            start: "top 75%",
-            toggleActions: "play none none reverse",
-          },
-        }
-      );
+    try {
+      ScrollTrigger.getAll().forEach(t => {
+        if (t.vars.trigger === "#manifesto" || t.trigger?.id === "manifesto") t.kill();
+      });
+    } catch {}
+    let ctx: gsap.Context | undefined;
+    try {
+      ctx = gsap.context(() => {
+        gsap.fromTo(
+          "#manifesto-content",
+          { opacity: 0, y: 50 },
+          {
+            opacity: 1, y: 0, duration: 1.2, ease: "power3.out",
+            scrollTrigger: {
+              trigger: "#manifesto",
+              start: "top 75%",
+              toggleActions: "play none none reverse",
+            },
+          }
+        );
 
-      gsap.fromTo(
-        ".manifesto-line",
-        { opacity: 0, x: -40, filter: "blur(4px)" },
-        {
-          opacity: 1, x: 0, filter: "blur(0px)", duration: 1, stagger: 0.2, ease: "power3.out",
-          scrollTrigger: {
-            trigger: "#manifesto",
-            start: "top 70%",
-            toggleActions: "play none none reverse",
-          },
-        }
-      );
+        gsap.fromTo(
+          ".manifesto-line",
+          { opacity: 0, x: -40, filter: "blur(4px)" },
+          {
+            opacity: 1, x: 0, filter: "blur(0px)", duration: 1, stagger: 0.2, ease: "power3.out",
+            scrollTrigger: {
+              trigger: "#manifesto",
+              start: "top 70%",
+              toggleActions: "play none none reverse",
+            },
+          }
+        );
 
-      gsap.fromTo(
-        ".manifesto-body",
-        { opacity: 0, y: 20 },
-        {
-          opacity: 1, y: 0, duration: 0.8, stagger: 0.12, ease: "power3.out",
-          scrollTrigger: {
-            trigger: "#manifesto",
-            start: "top 60%",
-            toggleActions: "play none none reverse",
-          },
-        }
-      );
-    }, sectionRef);
-    return () => ctx.revert();
+        gsap.fromTo(
+          ".manifesto-body",
+          { opacity: 0, y: 20 },
+          {
+            opacity: 1, y: 0, duration: 0.8, stagger: 0.12, ease: "power3.out",
+            scrollTrigger: {
+              trigger: "#manifesto",
+              start: "top 60%",
+              toggleActions: "play none none reverse",
+            },
+          }
+        );
+      });
+    } catch {}
+    return () => {
+      try { ctx?.revert(); } catch {}
+      try { ScrollTrigger.getAll().forEach(t => { if (t.trigger && !document.body.contains(t.trigger)) t.kill(); }); } catch {}
+    };
   }, []);
 
   return (

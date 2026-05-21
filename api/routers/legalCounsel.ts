@@ -1,4 +1,4 @@
-import { env } from "../lib/env";
+import { env } from "../lib/env.js";
 
 const SYSTEM_PROMPT = `You are an AI Legal Assistant for a demo product.
 
