@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [
     devServer({ entry: "api/boot.ts", exclude: [/^\/(?!api\/).*$/] }),
     react()],
-  base: process.env.PAGES_BASE || "/",
+  base: "/",
   server: {
     port: 3000,
   },

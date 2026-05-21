@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: lexcore
+    env: node
+    buildCommand: npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ID
+        value: lexcore
+      - key: APP_SECRET
+        value: lexcore-secret
+      - key: GROQ_API_KEY
+        value: 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
