@@ -23,10 +23,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run build
-      - uses: actions/configure-pages@v4
-        with:
-          static_site_generator: next
+      - run: PAGES_BASE=/lexcore/ npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist/public
@@ -36,7 +33,7 @@ jobs:
     needs: build
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: https://hbtabi.github.io/lexcore/
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
