@@ -11,5 +11,5 @@ services:
         value: lexcore
       - key: APP_SECRET
         value: lexcore-secret
-      - key: GROQ_API_KEY
-        value: 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
+      # - key: GROQ_API_KEY
+      #   value: set-via-render-dashboard
