@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "../middleware.js";
-import { env } from "../lib/env.js";
-import { waitlistStore } from "../lib/waitlist-store.js";
+import { createRouter, publicQuery } from "../middleware";
+import { env } from "../lib/env";
+import { waitlistStore } from "../lib/waitlist-store";
 
 export const waitlistRouter = createRouter({
   join: publicQuery

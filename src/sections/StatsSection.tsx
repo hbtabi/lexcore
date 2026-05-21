@@ -15,45 +15,34 @@ export default function StatsSection() {
   const sectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    try {
-      ScrollTrigger.getAll().forEach(t => {
-        if (t.vars.trigger === "#stats" || t.trigger?.id === "stats") t.kill();
-      });
-    } catch {}
-    let ctx: gsap.Context | undefined;
-    try {
-      ctx = gsap.context(() => {
-        gsap.fromTo(
-          "#stats-content",
-          { opacity: 0, y: 40 },
-          {
-            opacity: 1, y: 0, duration: 1, ease: "power3.out",
-            scrollTrigger: {
-              trigger: "#stats",
-              start: "top 80%",
-              toggleActions: "play none none reverse",
-            },
-          }
-        );
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        "#stats-content",
+        { opacity: 0, y: 40 },
+        {
+          opacity: 1, y: 0, duration: 1, ease: "power3.out",
+          scrollTrigger: {
+            trigger: "#stats",
+            start: "top 80%",
+            toggleActions: "play none none reverse",
+          },
+        }
+      );
 
-        gsap.fromTo(
-          ".stat-item",
-          { opacity: 0, y: 30, scale: 0.95 },
-          {
-            opacity: 1, y: 0, scale: 1, duration: 0.7, stagger: 0.15, ease: "power3.out",
-            scrollTrigger: {
-              trigger: "#stats",
-              start: "top 75%",
-              toggleActions: "play none none reverse",
-            },
-          }
-        );
-      });
-    } catch {}
-    return () => {
-      try { ctx?.revert(); } catch {}
-      try { ScrollTrigger.getAll().forEach(t => { if (t.trigger && !document.body.contains(t.trigger)) t.kill(); }); } catch {}
-    };
+      gsap.fromTo(
+        ".stat-item",
+        { opacity: 0, y: 30, scale: 0.95 },
+        {
+          opacity: 1, y: 0, scale: 1, duration: 0.7, stagger: 0.15, ease: "power3.out",
+          scrollTrigger: {
+            trigger: "#stats",
+            start: "top 75%",
+            toggleActions: "play none none reverse",
+          },
+        }
+      );
+    }, sectionRef);
+    return () => ctx.revert();
   }, []);
 
   return (

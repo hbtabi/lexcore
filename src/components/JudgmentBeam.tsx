@@ -42,6 +42,9 @@ export default function JudgmentBeam({ active, onComplete }: { active: boolean; 
             <div className="absolute top-[30%] left-1/2 -translate-x-1/2 w-24 h-24 bg-[#D9A02D] blur-2xl opacity-5 rounded-full" />
           </div>
 
+          {/* Flash */}
+          <div className="absolute inset-0 bg-[#D9A02D] animate-beam-flash pointer-events-none" />
+
           {/* Light rays */}
           <div className="absolute top-[5%] left-[20%] w-[1px] h-[60%] bg-gradient-to-b from-[#D9A02D]/10 to-transparent rotate-12" />
           <div className="absolute top-[5%] right-[20%] w-[1px] h-[60%] bg-gradient-to-b from-[#D9A02D]/10 to-transparent -rotate-12" />

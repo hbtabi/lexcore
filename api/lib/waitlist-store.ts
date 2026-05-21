@@ -11,10 +11,7 @@ interface WaitlistEntry {
   createdAt: string;
 }
 
-const STORE_PATH = path.resolve(
-  process.env.VERCEL ? "/tmp" : process.cwd(),
-  "data/waitlist.json"
-);
+const STORE_PATH = path.resolve(process.cwd(), "data/waitlist.json");
 
 function ensureDir() {
   const dir = path.dirname(STORE_PATH);

@@ -1,487 +1,719 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Link } from "react-router";
-import { MessageSquare, Trash2, Send, ChevronLeft, PanelLeftClose, PanelLeft, Sparkles, Mic, MicOff, Paperclip, X, Copy, ThumbsUp, ThumbsDown, Bookmark, RefreshCw, Download, Settings, Sliders, Gauge, Star, Zap, Plus, Scale, Home } from "lucide-react";
-import AIJudgeAvatar from "../components/AIJudgeAvatar";
+import {
+  ArrowLeft, Send, Scale, Loader2, Sparkles, Plus, History, Trash2,
+} from "lucide-react";
+import RiskMeter from "../components/RiskMeter";
 import ScrollUnfold from "../components/ScrollUnfold";
 import ProcessingBrain from "../components/ProcessingBrain";
+import CaseFileFolder from "../components/CaseFileFolder";
+import DemoCourtroom from "../components/DemoCourtroom";
+import AIJudgeAvatar from "../components/AIJudgeAvatar";
+import InvestigationBoard from "../components/InvestigationBoard";
+import RuleOcean from "../components/RuleOcean";
+import IcebergView from "../components/IcebergView";
 import DNAHelix from "../components/DNAHelix";
-import PlanetSystem from "../components/PlanetSystem";
-import CasePrinter from "../components/CasePrinter";
-import IcebergLawModel from "../components/IcebergLawModel";
-import OpticalLens from "../components/OpticalLens";
-import CompassConsequences from "../components/CompassConsequences";
-import ThreadWeaving from "../components/ThreadWeaving";
+import DualReality from "../components/DualReality";
 import BubbleDecision from "../components/BubbleDecision";
+import VortexArguments from "../components/VortexArguments";
+import CauseEffectChain from "../components/CauseEffectChain";
+import WeightScale from "../components/WeightScale";
+import CompassConsequences from "../components/CompassConsequences";
+import PlanetSystem from "../components/PlanetSystem";
+import ThreadWeaving from "../components/ThreadWeaving";
+import TimelineCollapse from "../components/TimelineCollapse";
+import LightShadowAnalysis from "../components/LightShadowAnalysis";
 
-declare global { interface Window { SpeechRecognition: any; webkitSpeechRecognition: any; } }
+type Message = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
 
-interface Message { role: "user" | "assistant"; content: string; id: string; }
-interface Chat { id: string; messages: Message[]; createdAt: number; title: string; }
+type CaseStatus = "pending" | "processing" | "resolved" | "error";
 
-const CHATS_KEY = "lexcore-chats-v3";
-function loadChats(): Chat[] { try { const r = localStorage.getItem(CHATS_KEY); return r ? JSON.parse(r) : []; } catch { return []; } }
-function saveChats(chats: Chat[]) { try { localStorage.setItem(CHATS_KEY, JSON.stringify(chats)); } catch {} }
-function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
-function summarize(text: string) { return text.length > 50 ? text.slice(0, 50) + "..." : text; }
-function msgId() { return "m" + genId(); }
-
-const jurisdictions = ["California, USA", "New York, USA", "Texas, USA", "Florida, USA", "London, UK", "Ontario, Canada", "New South Wales, AU", "Berlin, Germany", "Paris, France", "Tokyo, Japan"];
-const suggestions = ["My landlord won't return my security deposit", "I was in a car accident and the other driver was at fault", "My employer is refusing to pay overtime", "I need to review a contract before signing"];
-const followUpPool = ["What evidence should I gather?", "What are my chances in court?", "How long does this process take?", "Should I hire a lawyer?", "What are my legal rights?", "What are the next steps?", "Can I file a claim?", "What similar cases exist?"];
-
-function pickFollowUps() {
-  const s = [...followUpPool];
-  for (let i = s.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [s[i], s[j]] = [s[j], s[i]]; }
-  return s.slice(0, 3);
+interface CaseFile {
+  id: string;
+  title: string;
+  status: CaseStatus;
+  timestamp: string;
+  riskLevel: "low" | "moderate" | "high" | "critical";
+  userMessage: string;
+  aiResponse: string;
 }
 
-function assessRisk(text: string): "low" | "medium" | "high" {
-  const h = ["eviction", "lawsuit", "criminal", "fired", "terminated", "custody", "fraud", "arrest"];
-  const m = ["sue", "breach", "deposit", "unpaid", "landlord", "discrimination", "damage"];
-  const lower = text.toLowerCase();
-  let score = 0;
-  for (const w of h) if (lower.includes(w)) score += 3;
-  for (const w of m) if (lower.includes(w)) score += 1.5;
-  if (score >= 4) return "high";
-  if (score >= 1.5) return "medium";
-  return "low";
+const examples = [
+  {
+    label: "Landlord won't return deposit",
+    text: "I moved out of my apartment two months ago. My landlord is refusing to return my $2,000 security deposit, claiming there were damages to the carpet. I have photos showing the carpet was in good condition when I moved out. This is in New York.",
+  },
+  {
+    label: "Fired without warning",
+    text: "My employer terminated me last week with no prior notice or warning. I have worked there for three years. They said it was due to performance issues, but I never received any negative feedback or performance improvement plans. This happened in California.",
+  },
+  {
+    label: "Client refused to pay",
+    text: "I completed a freelance web development project worth $5,000 under a written contract. The client accepted the work but has refused to pay for 60 days, claiming the quality is not what they expected. There was no quality clause in the contract. I am based in Texas, the client is in Delaware.",
+  },
+  {
+    label: "Visa sponsorship question",
+    text: "I am a US citizen married to a Canadian citizen. We have been married for one year and live together in Chicago. I want to sponsor her for a green card. She currently has a valid tourist visa. What is the process and timeline?",
+  },
+  {
+    label: "Neighbor small claims suit",
+    text: "My neighbor is taking me to small claims court for $8,000, claiming my tree fell on their fence during a storm. The tree was healthy before the storm, and there was a severe weather warning that day. This happened in Florida.",
+  },
+  {
+    label: "Non-compete violation",
+    text: "I signed a non-compete agreement with my previous employer that restricts me from working in my industry for two years within a 50-mile radius. My new job offer is in the same industry, 30 miles from my old office. I live in California.",
+  },
+];
+
+function formatResponse(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.*?)\*/g, "<em>$1</em>")
+    .replace(/\n{2,}/g, "\n\n")
+    .replace(/^- /gm, "&bull; ")
+    .trim();
 }
 
-function RiskMeter({ level }: { level: string }) {
-  const colors: Record<string, string> = { low: "#22C55E", medium: "#EAB308", high: "#EF4444" };
-  const pct: Record<string, number> = { low: 20, medium: 55, high: 85 };
-  const c = colors[level] || "#64748B";
-  return (
-    <div className="flex items-center gap-2">
-      <Gauge className="w-3.5 h-3.5" style={{ color: c }} />
-      <div className="w-16 h-1.5 rounded-full bg-[#1E293B] overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-1000" style={{ width: (pct[level] || 0) + "%", backgroundColor: c, boxShadow: "0 0 8px " + c }} />
-      </div>
-      <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: c }}>{level}</span>
-    </div>
-  );
-}
+const LAWS = [
+  { icon: "\u2696", name: "Employment Law" },
+  { icon: "\uD83C\uDFE2", name: "Housing Court" },
+  { icon: "\uD83D\uDCCB", name: "Contract Law" },
+  { icon: "\uD83C\uDF0D", name: "Immigration Hub" },
+  { icon: "\uD83D\uDCB0", name: "Tax & Finance" },
+  { icon: "\uD83D\uDEE1\uFE0F", name: "Civil Rights" },
+];
 
 export default function DemoPage() {
-  const [chats, setChats] = useState<Chat[]>(() => loadChats());
-  const [activeId, setActiveId] = useState<string | null>(() => chats[chats.length - 1]?.id ?? null);
   const [input, setInput] = useState("");
-  const [streaming, setStreaming] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [caseFiles, setCaseFiles] = useState<CaseFile[]>([]);
+  const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [unfoldingIndex, setUnfoldingIndex] = useState<number | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [showIceberg, setShowIceberg] = useState(false);
-  const [printerActive, setPrinterActive] = useState(false);
-  const [listening, setListening] = useState(false);
-  const [files, setFiles] = useState<{ name: string; size: number }[]>([]);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [jurisdiction, setJurisdiction] = useState(jurisdictions[0]);
-  const [temperature, setTemperature] = useState(0.4);
-  const [bookmarked, setBookmarked] = useState<Set<string>>(new Set());
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
-  const [followUpSuggestions, setFollowUpSuggestions] = useState<string[]>([]);
-  const [showCmdPalette, setShowCmdPalette] = useState(false);
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
-
-  const active = chats.find(c => c.id === activeId);
-  const activeMessages = active?.messages ?? [];
-  const isProcessing = streaming;
-  const hasResult = activeMessages.length > 0 && !isProcessing;
-  const judgeExp = isProcessing ? "processing" : hasResult ? "delivering" : activeMessages.length > 0 ? "listening" : "neutral";
-  const lastAssistantIdx = activeMessages.map((m, i) => m.role === "assistant" ? i : -1).filter(i => i >= 0).pop();
-  const currentRisk = activeMessages.length > 0 ? assessRisk(activeMessages.map(m => m.content).join(" ")) : "low";
+  const [showBrain, setShowBrain] = useState(false);
+  const [currentRiskText, setCurrentRiskText] = useState("");
+  const [judgeExpression, setJudgeExpression] = useState<"neutral" | "listening" | "processing" | "concerned">("neutral");
+  const [showScrollContent, setShowScrollContent] = useState(false);
+  const [statusPhase, setStatusPhase] = useState<"idle" | "analyzing" | "done">("idle");
+  const [showInvestigation, setShowInvestigation] = useState(false);
+  const [puzzlePieces, setPuzzlePieces] = useState<string[]>([]);
+  const [visMode, setVisMode] = useState<string>("iceberg");
+  const [chats, setChats] = useState<{ id: string; title: string; messages: Message[]; caseFiles: CaseFile[]; timestamp: string }[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [showChatHistory, setShowChatHistory] = useState(false);
+  const chatRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setShowCmdPalette(p => !p); }
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") { e.preventDefault(); setShowSearch(p => !p); }
-    };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, []);
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+  }, [messages]);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [activeMessages, streaming]);
-
-  const filteredChats = useMemo(() => {
-    if (!searchQuery) return chats;
-    const q = searchQuery.toLowerCase();
-    return chats.filter(c => c.title.toLowerCase().includes(q) || c.messages.some(m => m.content.toLowerCase().includes(q)));
-  }, [chats, searchQuery]);
-
-  const sendMessage = useCallback(async (text?: string) => {
-    const msg = (text || input).trim();
-    if (!msg || streaming) return;
+  const runAnalysis = async (text: string) => {
     setInput("");
     setError("");
-    setShowIceberg(false);
-    setFollowUpSuggestions([]);
-    let targetChatId = activeId;
-    if (!targetChatId) {
-      targetChatId = genId();
-      const nc: Chat = { id: targetChatId, messages: [], createdAt: Date.now(), title: summarize(msg) };
-      setChats(prev => { const n = [...prev, nc]; saveChats(n); return n; });
-      setActiveId(targetChatId);
-    }
-    const mu: Message = { role: "user", content: msg, id: msgId() };
-    setChats(prev => { const n = prev.map(c => c.id === targetChatId ? { ...c, messages: [...c.messages, mu] } : c); saveChats(n); return n; });
-    setStreaming(true);
-    setPrinterActive(true);
-    const aiIdx = activeMessages.length + 1;
+    setShowScrollContent(false);
+    setIsLoading(true);
+    setShowBrain(true);
+    setCurrentRiskText(text);
+    setJudgeExpression("listening");
+    setStatusPhase("analyzing");
+
+    const caseId = "c-" + Date.now();
+    const userMsg: Message = { id: "u-" + Date.now(), role: "user", content: text };
+    setMessages(prev => [...prev, userMsg]);
+
+    const newCase: CaseFile = {
+      id: caseId,
+      title: text.slice(0, 45) + (text.length > 45 ? "..." : ""),
+      status: "processing",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      riskLevel: "moderate",
+      userMessage: text,
+      aiResponse: "",
+    };
+    setCaseFiles(prev => [newCase, ...prev]);
+    setActiveCaseId(caseId);
+
+    setStatusPhase("analyzing");
+    setJudgeExpression("processing");
+
     try {
       const res = await fetch("/api/legal-counsel", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
       });
+      if (!res.ok) throw new Error("API request failed");
       const data = await res.json();
-      if (data.success) {
-        const ma: Message = { role: "assistant", content: data.response, id: msgId() };
-        setChats(prev => { const n = prev.map(c => c.id === targetChatId ? { ...c, messages: [...c.messages, ma], title: c.title || summarize(msg) } : c); saveChats(n); return n; });
-        setUnfoldingIndex(aiIdx);
-        setFollowUpSuggestions(pickFollowUps());
-      } else {
-        setError(data.error || "Something went wrong.");
+
+      if (!data.success) {
+        setError(data.error || "Failed to get analysis.");
+        setMessages(prev => prev.filter(m => m.id !== userMsg.id));
+        setCaseFiles(prev => prev.filter(c => c.id !== caseId));
+        setJudgeExpression("concerned");
+        setIsLoading(false);
+        setShowBrain(false);
+        return;
       }
-    } catch { setError("Network error. Please try again."); }
-    setStreaming(false);
-    setPrinterActive(false);
-  }, [input, streaming, activeId, activeMessages.length]);
 
-  const startListening = () => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setError("Voice input not supported. Use Chrome."); return; }
-    const r = new SR(); r.lang = "en-US"; r.interimResults = false;
-    r.onresult = (e: any) => { setInput(prev => prev + e.results[e.results.length - 1][0].transcript); };
-    r.onerror = () => setListening(false);
-    r.onend = () => setListening(false);
-    recognitionRef.current = r;
-    try { r.start(); setListening(true); } catch { setListening(false); }
-  };
-  const stopListening = () => { try { recognitionRef.current?.stop(); } catch {} setListening(false); };
+      const assistantMsg: Message = { id: "a-" + Date.now(), role: "assistant", content: data.response };
+      setMessages(prev => [...prev, assistantMsg]);
 
-  const copyMsg = (text: string) => navigator.clipboard.writeText(text);
-  const toggleBookmark = (id: string) => setBookmarked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+      setCaseFiles(prev => prev.map(c =>
+        c.id === caseId ? { ...c, status: "resolved" as CaseStatus, aiResponse: data.response } : c
+      ));
 
-  const exportChat = () => {
-    if (!active) return;
-    const txt = active.messages.map(m => m.role.toUpperCase() + ": " + m.content).join("\n\n---\n\n");
-    const blob = new Blob([txt], { type: "text/plain" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (active.title || "chat") + ".txt"; a.click();
+      setShowScrollContent(true);
+      setJudgeExpression("neutral");
+      setStatusPhase("done");
+
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+      setMessages(prev => prev.filter(m => m.id !== userMsg.id));
+      setCaseFiles(prev => prev.filter(c => c.id !== caseId));
+      setJudgeExpression("concerned");
+    } finally {
+      setIsLoading(false);
+      setShowBrain(false);
+    }
   };
 
-  const newChat = () => { setActiveId(null); setInput(""); setError(""); setUnfoldingIndex(null); setShowIceberg(false); setFollowUpSuggestions([]); setFiles([]); inputRef.current?.focus(); };
-  const deleteChat = (id: string) => { setChats(prev => { const n = prev.filter(c => c.id !== id); saveChats(n); return n; }); setActiveId(prev => prev === id ? null : prev); setUnfoldingIndex(null); };
-  const selectChat = (id: string) => { setActiveId(id); setUnfoldingIndex(null); setShowIceberg(false); setFollowUpSuggestions([]); if (window.innerWidth < 768) setSidebarOpen(false); };
-  const removeFile = (i: number) => setFiles(prev => prev.filter((_, idx) => idx !== i));
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!input.trim() || isLoading) return;
+    runAnalysis(input.trim());
+  };
+
+  const startNewChat = () => {
+    if (messages.length > 0) {
+      const chatId = "chat-" + Date.now();
+      setChats(prev => [{
+        id: chatId,
+        title: messages.find(m => m.role === "user")?.content.slice(0, 50) || "New Chat",
+        messages,
+        caseFiles,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      }, ...prev]);
+    }
+    setMessages([]);
+    setCaseFiles([]);
+    setActiveCaseId(null);
+    setActiveChatId(null);
+    setShowScrollContent(false);
+    setCurrentRiskText("");
+    setShowChatHistory(false);
+    setStatusPhase("idle");
+  };
+
+  const switchChat = (chatId: string) => {
+    const chat = chats.find(c => c.id === chatId);
+    if (!chat) return;
+    setMessages(chat.messages);
+    setCaseFiles(chat.caseFiles);
+    setActiveChatId(chatId);
+    setActiveCaseId(null);
+    setShowScrollContent(true);
+    setCurrentRiskText(chat.messages.find(m => m.role === "user")?.content || "");
+    setShowChatHistory(false);
+  };
+
+  const deleteChat = (chatId: string) => {
+    setChats(prev => prev.filter(c => c.id !== chatId));
+    if (activeChatId === chatId) {
+      setMessages([]);
+      setCaseFiles([]);
+      setActiveChatId(null);
+      setActiveCaseId(null);
+    }
+  };
+
+  const selectCase = (caseId: string) => {
+    setActiveCaseId(caseId);
+    const cf = caseFiles.find(c => c.id === caseId);
+    if (!cf) return;
+    setMessages([]);
+    setShowScrollContent(false);
+    setStatusPhase("idle");
+
+    // Rebuild messages from case
+    const userMsg: Message = { id: "u-" + caseId, role: "user", content: cf.userMessage };
+    const msgs: Message[] = [userMsg];
+    if (cf.aiResponse) {
+      const aiMsg: Message = { id: "a-" + caseId, role: "assistant", content: cf.aiResponse };
+      msgs.push(aiMsg);
+      // Show response when selecting resolved case
+      setTimeout(() => setShowScrollContent(true), 300);
+    }
+    setMessages(msgs);
+    if (cf.aiResponse) setCurrentRiskText(cf.userMessage);
+  };
+
+  const lastUserMessage = messages.filter(m => m.role === "user").pop()?.content || "";
+  const lastAiMessage = messages.filter(m => m.role === "assistant").pop()?.content || "";
+
+  const renderVisualization = (mode: string, responseText: string, userText: string) => {
+    const words = userText.split(" ");
+    const keyFacts = words.slice(0, 3);
+    const uncertain = words.slice(3, 6).length > 0 ? words.slice(3, 6) : ["jurisdiction unclear", "statute of limitations?"];
+    const sentences = responseText.split(". ").filter(Boolean).slice(0, 6);
+    const relevantAreas = ["EMPLOYMENT", "HOUSING", "CONTRACT", "IMMIGRATION"];
+
+    switch (mode) {
+      case "iceberg":
+        return <IcebergView content={formatResponse(responseText)} visible={true} />;
+      case "dna":
+        return <DNAHelix active={true} facts={keyFacts} laws={["case law", "statutes", "precedent"]} outcome={sentences[0] || responseText.slice(0, 60)} />;
+      case "vortex":
+        return <VortexArguments active={true} />;
+      case "dual":
+        return <DualReality userText={userText} aiText={responseText} visible={true} />;
+      case "bubble":
+        return <BubbleDecision active={true} facts={sentences.slice(0, 5)} />;
+      case "compass":
+        return <CompassConsequences active={true} riskLevel={50 + Math.sin(Date.now() * 0.001) * 30} />;
+      case "chain":
+        return <CauseEffectChain active={true} steps={sentences.slice(0, 5)} />;
+      case "scale":
+        return <WeightScale active={true} level={55} />;
+      case "planets":
+        return <PlanetSystem active={true} relevantAreas={relevantAreas} />;
+      case "threads":
+        return <ThreadWeaving active={true} />;
+      case "timeline":
+        return <TimelineCollapse active={true} events={sentences.slice(0, 4)} />;
+      case "shadow":
+        return <LightShadowAnalysis active={true} facts={keyFacts} uncertain={uncertain} />;
+      default:
+        return <IcebergView content={formatResponse(responseText)} visible={true} />;
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#070B11] via-[#0A0F18] to-[#070B11] flex relative overflow-hidden selection:bg-[#D9A02D]/20 selection:text-[#FAFAFA]">
-      {/* Ambient background */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#070B11] via-[#0C1421] to-[#070B11]" />
-        <div className="absolute top-1/4 left-1/3 w-[500px] h-[500px] bg-[#D9A02D]/[0.015] rounded-full blur-[120px]" />
-        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-[#3B82F6]/[0.01] rounded-full blur-[100px]" />
-      </div>
+    <div className="relative min-h-screen bg-[#030303] overflow-hidden">
+      <div className="noise-overlay" />
+      <DemoCourtroom isProcessing={isLoading} hasResult={!!lastAiMessage && !isLoading} />
 
-      {/* Cmd palette */}
-      {showCmdPalette && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]" onClick={() => setShowCmdPalette(false)}>
-          <div className="bg-[#0C1421]/95 backdrop-blur-2xl border border-[#1E293B]/60 rounded-xl p-4 w-full max-w-md shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 border-b border-[#1E293B]/40 pb-3 mb-3">
-              <Zap className="w-4 h-4 text-[#D9A02D]" />
-              <input ref={searchInputRef} autoFocus placeholder="Type a command..." className="flex-1 bg-transparent text-sm text-[#FAFAFA] placeholder-[#64748B] outline-none font-body" />
-              <span className="font-mono text-[9px] text-[#64748B] bg-[#1E293B]/40 px-2 py-0.5 rounded">ESC</span>
-            </div>
-            {[
-              { label: "New Chat", icon: Plus, action: newChat },
-              { label: "Toggle Sidebar", icon: PanelLeft, action: () => setSidebarOpen(!sidebarOpen) },
-              { label: "Search Chats", icon: MessageSquare, action: () => setShowSearch(true) },
-              { label: "Export Chat", icon: Download, action: exportChat },
-              { label: "Settings", icon: Settings, action: () => setSettingsOpen(true) },
-            ].map((cmd, i) => (
-              <button key={i} onClick={() => { cmd.action(); setShowCmdPalette(false); }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#D9A02D]/10 text-[#94A3B8] hover:text-[#FAFAFA] transition-all text-left animate-fade-in font-body text-[13px]"
-                style={{ animationDelay: (i * 0.05) + "s" }}
-              ><cmd.icon className="w-4 h-4 text-[#D9A02D]/60" /><span className="flex-1">{cmd.label}</span></button>
-            ))}
+      {/* Ambient glows */}
+      <div className="absolute top-[10%] left-[5%] w-[400px] h-[400px] rounded-full blur-[120px] pointer-events-none"
+        style={{ background: "rgba(217,160,45,0.04)" }}
+      />
+      <div className="absolute bottom-[20%] right-[5%] w-[350px] h-[350px] rounded-full blur-[100px] pointer-events-none"
+        style={{ background: "rgba(217,160,45,0.03)" }}
+      />
+
+      <div className="relative z-10 max-w-6xl mx-auto px-6 py-8 flex flex-col min-h-screen">
+        {/* ── HEADER ── */}
+        <div className="flex items-center justify-between mb-6">
+          <Link to="/" className="group flex items-center gap-2 text-[#94A3B8] hover:text-[#FAFAFA] transition-colors">
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            <span className="font-mono text-[11px] uppercase tracking-[0.15em]">Back to Home</span>
+          </Link>
+
+          <div className="flex items-center gap-2.5">
+            <button onClick={() => setShowChatHistory(prev => !prev)}
+              className="relative flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#94A3B8]/10 bg-[#0F172A]/40 hover:bg-[#0F172A]/70 hover:border-[#94A3B8]/25 transition-all duration-200"
+            >
+              <History className="w-3.5 h-3.5 text-[#94A3B8]" />
+              <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-[#94A3B8] hidden sm:block">History</span>
+              {chats.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#D9A02D] text-[#030303] flex items-center justify-center font-mono text-[8px] font-bold">
+                  {chats.length}
+                </span>
+              )}
+            </button>
+            <button onClick={startNewChat}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#D9A02D]/20 bg-[#D9A02D]/10 hover:bg-[#D9A02D]/20 hover:border-[#D9A02D]/40 transition-all duration-200"
+            >
+              <Plus className="w-3.5 h-3.5 text-[#D9A02D]" />
+              <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-[#D9A02D] hidden sm:block">New Chat</span>
+            </button>
+            <AIJudgeAvatar expression={judgeExpression} analyzing={isLoading} />
+            <Link to="/" className="flex items-center gap-2.5">
+              <img src="/logo.png" alt="Logo" className="h-7 w-auto" />
+              <span className="font-mono text-[11px] uppercase tracking-[0.25em] text-[#FAFAFA]/80 hidden sm:block">LexCore AI</span>
+            </Link>
           </div>
         </div>
-      )}
 
-      {/* Settings */}
-      {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setSettingsOpen(false)}>
-          <div className="w-80 bg-[#0C1421]/95 backdrop-blur-2xl border-l border-[#1E293B]/60 h-full overflow-y-auto p-6 animate-slide-left" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2"><Settings className="w-4 h-4 text-[#D9A02D]" /><span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#FAFAFA]">Settings</span></div>
-              <button onClick={() => setSettingsOpen(false)} className="text-[#64748B] hover:text-[#FAFAFA] transition-colors"><X className="w-4 h-4" /></button>
+        {/* ── CHAT HISTORY DROPDOWN ── */}
+        {showChatHistory && (
+          <div className="mb-4 glass-panel-deep rounded-xl overflow-hidden max-h-[300px] overflow-y-auto">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#94A3B8]/8">
+              <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-[#64748B]">Chat History</span>
+              <span className="font-mono text-[8px] text-[#64748B]/60">{chats.length} conversations</span>
             </div>
-            <div className="space-y-6">
-              <div>
-                <label className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#64748B] block mb-2">Jurisdiction</label>
-                <select value={jurisdiction} onChange={e => setJurisdiction(e.target.value)}
-                  className="w-full bg-[#070B11] border border-[#1E293B] rounded-lg px-3 py-2.5 text-sm text-[#FAFAFA] font-body cursor-pointer focus:border-[#D9A02D]/30 focus:outline-none transition-colors"
-                >{jurisdictions.map(j => <option key={j} className="bg-[#070B11]">{j}</option>)}</select>
+            {chats.length === 0 ? (
+              <div className="px-4 py-6 text-center">
+                <span className="font-mono text-[9px] text-[#64748B]/50">No previous chats</span>
               </div>
-              <div>
-                <label className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#64748B] block mb-2">Temperature: {temperature.toFixed(1)}</label>
-                <input type="range" min="0" max="1" step="0.1" value={temperature} onChange={e => setTemperature(parseFloat(e.target.value))} className="w-full accent-[#D9A02D]" />
-                <div className="flex justify-between font-mono text-[8px] text-[#64748B] mt-1"><span>Precise</span><span>Creative</span></div>
-              </div>
-              <div className="pt-4 border-t border-[#1E293B]/30 space-y-2">
-                <div className="flex justify-between text-[13px] font-body"><span className="text-[#94A3B8]">Model</span><span className="text-[#FAFAFA]">Llama 3.1 8B</span></div>
-                <div className="flex justify-between text-[13px] font-body"><span className="text-[#94A3B8]">Version</span><span className="text-[#FAFAFA]">LexCore v2.4</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Sidebar */}
-      <div className={"fixed md:relative z-20 h-full bg-[#0C1421]/90 backdrop-blur-2xl border-r border-[#1E293B]/30 transition-all duration-300 flex flex-col " + (sidebarOpen ? "w-[280px]" : "w-0 md:w-0 overflow-hidden")}>
-        <div className="flex items-center gap-2 px-4 pt-5 pb-3 border-b border-[#1E293B]/20">
-          <Scale className="w-4 h-4 text-[#D9A02D]" />
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#FAFAFA]">LexCore</span>
-        </div>
-        <div className="flex-shrink-0 p-3 space-y-2">
-          <button onClick={newChat}
-            className="w-full flex items-center justify-center gap-2 bg-[#D9A02D] text-[#070B11] font-mono text-[10px] uppercase tracking-[0.15em] px-3 py-2.5 rounded-lg transition-all duration-300 hover:bg-[#D9A02D]/90 active:scale-[0.98]"
-          ><Sparkles className="w-3.5 h-3.5" /> New Chat</button>
-          <div className="flex gap-1">
-            <button onClick={() => setShowSearch(!showSearch)}
-              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-[#1E293B]/40 text-[#64748B] hover:text-[#FAFAFA] hover:border-[#D9A02D]/20 transition-all font-mono text-[9px] uppercase tracking-wider"
-            ><MessageSquare className="w-3.5 h-3.5" /> Search</button>
-            <button onClick={exportChat} disabled={!active}
-              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-[#1E293B]/40 text-[#64748B] hover:text-[#FAFAFA] hover:border-[#D9A02D]/20 transition-all font-mono text-[9px] uppercase tracking-wider disabled:opacity-30"
-            ><Download className="w-3.5 h-3.5" /> Export</button>
-          </div>
-          {showSearch && (
-            <div className="relative animate-fade-in">
-              <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations..." className="w-full bg-[#070B11] border border-[#1E293B] rounded-lg px-3 py-2 text-xs text-[#FAFAFA] placeholder-[#64748B] font-body outline-none focus:border-[#D9A02D]/20 transition-colors" />
-              {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#FAFAFA]"><X className="w-3 h-3" /></button>}
-            </div>
-          )}
-        </div>
-        <div className="flex-1 overflow-y-auto px-2 space-y-0.5 scrollbar-thin">
-          {filteredChats.length === 0 ? (
-            <div className="text-center py-10">
-              <p className="font-body text-[12px] text-[#64748B]">No conversations yet</p>
-            </div>
-          ) : (
-            [...filteredChats].reverse().map((chat, idx) => (
-              <button key={chat.id} onClick={() => selectChat(chat.id)}
-                className={"w-full text-left flex items-center gap-2 px-3 py-2.5 rounded-lg transition-all duration-200 group animate-fade-in " + (chat.id === activeId ? "bg-[#D9A02D]/8 border border-[#D9A02D]/12" : "hover:bg-[#1E293B]/30 border border-transparent")}
-                style={{ animationDelay: (idx * 0.02) + "s" }}
-              >
-                <MessageSquare className={"w-3.5 h-3.5 flex-shrink-0 " + (chat.id === activeId ? "text-[#D9A02D]" : "text-[#475569]")} />
-                <div className="flex-1 min-w-0">
-                  <span className="block font-body text-[13px] text-[#94A3B8] truncate">{chat.title || "New conversation"}</span>
-                  <span className="font-mono text-[9px] text-[#475569]">{chat.messages.length} messages</span>
-                </div>
-                <button onClick={(e) => { e.stopPropagation(); deleteChat(chat.id); }}
-                  className="opacity-0 group-hover:opacity-100 text-[#475569] hover:text-red-400 transition-all p-1"><Trash2 className="w-3 h-3" /></button>
-              </button>
-            ))
-          )}
-        </div>
-        <div className="flex-shrink-0 p-3 border-t border-[#1E293B]/20">
-          <div className="flex items-center justify-between">
-            <Link to="/" className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.15em] text-[#64748B] hover:text-[#FAFAFA] transition-colors"><Home className="w-3.5 h-3.5" />Home</Link>
-            <button onClick={() => setSettingsOpen(true)} className="p-1.5 rounded-lg text-[#64748B] hover:text-[#FAFAFA] hover:bg-[#1E293B]/30 transition-all"><Sliders className="w-3.5 h-3.5" /></button>
-          </div>
-        </div>
-      </div>
-
-      <button onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="fixed top-4 z-30 bg-[#0C1421]/80 backdrop-blur border border-[#1E293B]/40 rounded-lg p-2 text-[#64748B] hover:text-[#FAFAFA] transition-all hover:border-[#D9A02D]/20"
-        style={{ left: sidebarOpen ? "288px" : "12px" }}
-      >{sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}</button>
-
-      {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0 relative">
-        {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-[#1E293B]/20 bg-[#070B11]/60 backdrop-blur-xl">
-          <div className="flex items-center gap-3">
-            <div className="relative"><AIJudgeAvatar expression={judgeExp} analyzing={isProcessing} />
-              <div className={"absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#070B11] " + (isProcessing ? "bg-amber-400 animate-pulse" : "bg-emerald-400")} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2"><span className="font-mono text-[11px] uppercase tracking-[0.15em] text-[#D9A02D]">LexCore AI</span></div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="font-mono text-[9px] text-[#64748B]">Llama 3.1 8B</span>
-                {activeMessages.length > 0 && <><span className="text-[#1E293B]">/</span><span className="font-mono text-[9px] text-[#64748B]">{activeMessages.length} msgs</span></>}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <RiskMeter level={currentRisk} />
-            <button onClick={() => setShowCmdPalette(true)} className="hidden md:flex items-center gap-1 font-mono text-[9px] text-[#64748B] px-2.5 py-1.5 border border-[#1E293B]/40 rounded-lg hover:border-[#D9A02D]/20 transition-all"><Zap className="w-3.5 h-3.5" /><span>&#8984;K</span></button>
-            <button onClick={newChat} className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#94A3B8] hover:text-[#FAFAFA] px-3 py-1.5 border border-[#1E293B] rounded-lg transition-all hover:border-[#D9A02D]/20">+ New</button>
-          </div>
-        </div>
-
-        {!activeId || activeMessages.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center px-6 overflow-y-auto py-8">
-            <div className="text-center mb-8 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#D9A02D]/10 to-[#D9A02D]/5 border border-[#D9A02D]/15 flex items-center justify-center mx-auto mb-5">
-                <Scale className="w-7 h-7 text-[#D9A02D]/60" />
-              </div>
-              <h2 className="font-display italic text-4xl text-[#FAFAFA] mb-3">Legal Counsel</h2>
-              <p className="font-body text-[15px] text-[#94A3B8] max-w-md mx-auto">Describe your legal situation in plain English.</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-lg animate-fade-in" style={{ animationDelay: "0.2s" }}>
-              {suggestions.map(s => (
-                <button key={s} onClick={() => sendMessage(s)}
-                  className="text-left px-4 py-3 rounded-xl border border-[#1E293B] bg-[#0A0F18]/60 text-[13px] text-[#94A3B8] hover:text-[#FAFAFA] hover:border-[#D9A02D]/20 hover:bg-[#0A0F18] transition-all duration-200 group"
-                ><span className="text-[#D9A02D] mr-2 group-hover:mr-3 transition-all">&rarr;</span>{s}</button>
-              ))}
-            </div>
-            <div className="mt-8 grid grid-cols-4 gap-3 animate-fade-in" style={{ animationDelay: "0.3s" }}>
-              {[
-                { comp: <IcebergLawModel visible={true} />, label: "Iceberg" },
-                { comp: <div className="w-10 h-10"><DNAHelix active={false} facts={[]} laws={[]} outcome="" /></div>, label: "DNA" },
-                { comp: <div className="w-10 h-10 opacity-50"><PlanetSystem active={true} /></div>, label: "Planets" },
-                { comp: <div className="w-10 h-10"><CasePrinter active={true} /></div>, label: "Print" },
-                { comp: <div className="w-10 h-10"><OpticalLens active={true} /></div>, label: "Lens" },
-                { comp: <div className="w-10 h-10"><CompassConsequences active={false} riskLevel={0} /></div>, label: "Compass" },
-                { comp: <div className="w-10 h-10"><ThreadWeaving active={false} /></div>, label: "Thread" },
-                { comp: <div className="w-10 h-10"><BubbleDecision active={false} facts={[]} /></div>, label: "Bubble" },
-              ].map((item, i) => (
-                <div key={i} className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-[#0A0F18]/30 border border-[#1E293B]/15 hover:border-[#D9A02D]/10 transition-all duration-500 animate-fade-in" style={{ animationDelay: (i * 0.08 + 0.3) + "s" }}>
-                  <div className="w-10 h-10">{item.comp}</div>
-                  <span className="font-mono text-[8px] text-[#64748B] uppercase tracking-wider">{item.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 max-w-3xl mx-auto w-full scrollbar-thin">
-            {/* Processing indicators */}
-            {isProcessing && (
-              <div className="mb-5 bg-[#0A0F18]/50 border border-[#1E293B]/30 rounded-xl p-4 animate-fade-in">
-                <div className="flex items-center justify-center gap-5 flex-wrap">
-                  <div className="w-12 h-12 floating"><ProcessingBrain active={true} /></div>
-                  <div className="w-12 h-12 floating" style={{ animationDelay: "0.3s" }}><ThreadWeaving active={true} /></div>
-                  <div className="w-12 h-12 floating" style={{ animationDelay: "0.6s" }}><CompassConsequences active={true} riskLevel={3} /></div>
-                  <div className="w-12 h-12 floating" style={{ animationDelay: "0.9s" }}><BubbleDecision active={true} facts={[]} /></div>
-                </div>
-                {printerActive && <div className="mt-3 animate-slide-up"><CasePrinter active={true} /></div>}
-                <div className="flex items-center justify-center gap-2 mt-3">
-                  <div className="flex gap-1">{[0,1,2].map(i => <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#D9A02D]/40 animate-bounce" style={{ animationDelay: (i * 0.15) + "s" }} />)}</div>
-                  <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#D9A02D]/40 ml-2">Analyzing your case</span>
-                </div>
-              </div>
-            )}
-
-            {/* Deep reasoning toggle */}
-            {lastAssistantIdx !== undefined && !isProcessing && (
-              <button onClick={() => setShowIceberg(!showIceberg)}
-                className="mb-4 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-[#64748B] hover:text-[#D9A02D]/60 transition-colors mx-auto animate-fade-in"
-              >{showIceberg ? "Hide" : "Show"} Deep Reasoning <div className={"w-5 h-5 transition-transform duration-500 " + (showIceberg ? "rotate-180" : "")}><IcebergLawModel visible={showIceberg} /></div></button>
-            )}
-
-            {/* Messages */}
-            {activeMessages.map((msg, i) => (
-              <div key={msg.id} className={"mb-5 animate-slide-up group/message"} style={{ animationDelay: (i * 0.04) + "s" }}>
-                {msg.role === "user" && (
-                  <div className="flex items-start gap-3 justify-end">
-                    <div className="bg-[#0A0F18] border border-[#1E293B] rounded-xl px-4 py-3 max-w-[80%]">
-                      <p className="font-body text-[14px] text-[#F1F5F9] leading-relaxed">{msg.content}</p>
-                    </div>
-                    <div className="w-8 h-8 rounded-full bg-[#1E293B] border border-[#1E293B] flex items-center justify-center flex-shrink-0 mt-1"><span className="text-[11px] font-mono text-[#64748B]">U</span></div>
-                  </div>
-                )}
-                {msg.role === "assistant" && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#D9A02D]/20 to-[#D9A02D]/5 border border-[#D9A02D]/20 flex items-center justify-center flex-shrink-0 mt-1"><span className="text-[9px] font-mono text-[#D9A02D]">AI</span></div>
+            ) : (
+              <div className="divide-y divide-[#94A3B8]/5">
+                {chats.map(chat => (
+                  <div key={chat.id}
+                    className={`flex items-center justify-between px-4 py-3 transition-all duration-200 cursor-pointer hover:bg-[#0F172A]/40 ${
+                      activeChatId === chat.id ? "bg-[#0F172A]/50 border-l-2 border-l-[#D9A02D]" : ""
+                    }`}
+                    onClick={() => switchChat(chat.id)}
+                  >
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#D9A02D]/60">Verdict</span>
-                        {i === unfoldingIndex ? <span className="font-mono text-[9px] text-[#64748B] animate-pulse">Unfolding...</span> : <span className="font-mono text-[9px] text-[#475569]">&#9679; Delivered</span>}
-                        <div className="ml-auto"><RiskMeter level={assessRisk(msg.content)} /></div>
-                      </div>
-                      {i === unfoldingIndex ? <ScrollUnfold content={msg.content} visible={true} /> : (
-                        <div className="pl-4 border-l-2 border-[#D9A02D]/20">
-                          <p className="font-body text-[14px] text-[#CBD5E1] leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-0.5 mt-2 opacity-0 group-hover/message:opacity-100 transition-all pl-4">
-                        <button onClick={() => copyMsg(msg.content)} className="p-1.5 rounded-md text-[#475569] hover:text-[#FAFAFA] hover:bg-[#1E293B]/40 transition-all"><Copy className="w-3.5 h-3.5" /></button>
-                        <button className="p-1.5 rounded-md text-[#475569] hover:text-green-400 hover:bg-[#1E293B]/40 transition-all"><ThumbsUp className="w-3.5 h-3.5" /></button>
-                        <button className="p-1.5 rounded-md text-[#475569] hover:text-red-400 hover:bg-[#1E293B]/40 transition-all"><ThumbsDown className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => toggleBookmark(msg.id)} className={"p-1.5 rounded-md hover:bg-[#1E293B]/40 transition-all " + (bookmarked.has(msg.id) ? "text-[#D9A02D]" : "text-[#475569] hover:text-[#FAFAFA]")}><Bookmark className="w-3.5 h-3.5" /></button>
-                        <button className="p-1.5 rounded-md text-[#475569] hover:text-[#D9A02D] hover:bg-[#1E293B]/40 transition-all"><RefreshCw className="w-3.5 h-3.5" /></button>
-                      </div>
-                      {showIceberg && i === lastAssistantIdx && <div className="mt-3 pl-4 animate-slide-up"><IcebergLawModel visible={true} /></div>}
+                      <p className="font-body text-[12px] text-[#CBD5E1] truncate">{chat.title}</p>
+                      <p className="font-mono text-[8px] text-[#64748B]/60 mt-0.5">
+                        {chat.messages.length} messages · {chat.timestamp}
+                      </p>
                     </div>
+                    <button onClick={(e) => { e.stopPropagation(); deleteChat(chat.id); }}
+                      className="ml-2 p-1.5 rounded-lg text-[#64748B]/40 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
                   </div>
-                )}
-              </div>
-            ))}
-
-            {/* Follow-up suggestions */}
-            {followUpSuggestions.length > 0 && !isProcessing && (
-              <div className="mb-5 pl-11 animate-fade-in">
-                <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-[#64748B] block mb-2">Suggested follow-ups</span>
-                <div className="flex flex-wrap gap-2">
-                  {followUpSuggestions.map((s, i) => (
-                    <button key={i} onClick={() => sendMessage(s)}
-                      className="font-body text-[12px] text-[#94A3B8] px-3 py-1.5 rounded-lg border border-[#1E293B] hover:border-[#D9A02D]/20 hover:text-[#FAFAFA] hover:bg-[#D9A02D]/5 transition-all animate-fade-in"
-                      style={{ animationDelay: (i * 0.1) + "s" }}
-                    >{s}</button>
-                  ))}
-                </div>
+                ))}
               </div>
             )}
-
-            <div ref={messagesEndRef} />
           </div>
         )}
 
-        {/* Error bar */}
-        {error && <div className="flex-shrink-0 flex items-center justify-center gap-2 px-6 py-2.5 text-red-400 text-sm bg-red-500/5 border-t border-red-500/10 animate-slide-up"><span>{error}</span><button onClick={() => setError("")} className="text-red-400/60 hover:text-red-400 ml-1">&times;</button></div>}
+        {/* ── INVESTIGATION BOARD ── */}
+        <InvestigationBoard
+          active={showInvestigation}
+          items={puzzlePieces.length > 0 ? puzzlePieces : ["Case submitted for review", "Analyzing legal framework", "Cross-referencing precedents", "Evaluating jurisdiction", "Synthesizing final guidance", "Verdict ready for delivery"]}
+          onClose={() => setShowInvestigation(false)}
+        />
 
-        {/* Input area */}
-        <div className="flex-shrink-0 border-t border-[#1E293B]/20 px-4 md:px-6 py-3 bg-[#070B11]/80 backdrop-blur-xl">
-          {files.length > 0 && (
-            <div className="max-w-3xl mx-auto flex gap-2 mb-3 animate-fade-in">
-              {files.map((f, i) => (
-                <div key={i} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0A0F18] border border-[#1E293B] text-[11px] font-mono text-[#94A3B8]">
-                  <Paperclip className="w-3 h-3 text-[#D9A02D]" /><span className="truncate max-w-[100px]">{f.name}</span>
-                  <button onClick={() => removeFile(i)} className="text-[#475569] hover:text-red-400 ml-1"><X className="w-2.5 h-2.5" /></button>
-                </div>
-              ))}
+        {/* ── STATUS INDICATOR ── */}
+        {isLoading && (
+          <div className="mb-4 flex items-center justify-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#D9A02D] animate-pulse shadow-[0_0_6px_rgba(217,160,45,0.5)]" />
+            <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-[#94A3B8]">Analyzing your case...</span>
+          </div>
+        )}
+
+        {/* ── MAIN CONTENT: Case Files Sidebar + Chat ── */}
+        <div className="flex-1 flex gap-4 min-h-0">
+          {/* Case Files Sidebar */}
+          {caseFiles.length > 0 && (
+            <div className="hidden md:flex flex-col w-56 flex-shrink-0">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#64748B]">Case Files</span>
+                <span className="font-mono text-[8px] text-[#64748B]/60">{caseFiles.length}</span>
+              </div>
+
+              {/* Investigation Mode toggle */}
+              <button
+                onClick={() => setShowInvestigation(prev => !prev)}
+                className={`mb-3 flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-all duration-300 ${
+                  showInvestigation
+                    ? "border-[#D9A02D]/30 bg-[#D9A02D]/10 text-[#D9A02D]"
+                    : "border-[#94A3B8]/10 bg-[#0F172A]/40 text-[#64748B] hover:border-[#94A3B8]/25"
+                }`}
+              >
+                <span className="text-[11px]">\uD83D\uDD0D</span>
+                <span className="font-mono text-[8px] uppercase tracking-[0.12em]">
+                  {showInvestigation ? "Board Active" : "Investigation"}
+                </span>
+              </button>
+              <div className="space-y-2 overflow-y-auto" style={{ maxHeight: "calc(100vh - 320px)" }}>
+                {caseFiles.map(cf => (
+                  <CaseFileFolder
+                    key={cf.id}
+                    title={cf.title}
+                    status={cf.status}
+                    timestamp={cf.timestamp}
+                    riskLevel={cf.riskLevel}
+                    isActive={cf.id === activeCaseId}
+                    onClick={() => selectCase(cf.id)}
+                  />
+                ))}
+              </div>
             </div>
           )}
-          <div className="max-w-3xl mx-auto flex gap-2" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); setFiles(prev => [...prev, ...Array.from(e.dataTransfer.files).slice(0, 3).map(f => ({ name: f.name, size: f.size }))]); }}>
-            <div className="flex-1 flex items-center gap-2 bg-[#0A0F18] border border-[#1E293B] rounded-xl px-4 focus-within:border-[#D9A02D]/20 transition-all duration-300">
-              <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                placeholder="Describe your legal situation..."
-                rows={1} className="flex-1 bg-transparent py-3 text-sm text-[#F1F5F9] placeholder-[#64748B] resize-none outline-none font-body"
-              />
-              <input ref={fileInputRef} type="file" multiple hidden onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files || []).slice(0, 3).map(f => ({ name: f.name, size: f.size }))])} />
-              <button onClick={() => fileInputRef.current?.click()} className="p-1.5 text-[#475569] hover:text-[#D9A02D] transition-colors"><Paperclip className="w-4 h-4" /></button>
-              <button onMouseDown={listening ? stopListening : startListening}
-                className={"p-1.5 rounded-lg transition-all duration-300 " + (listening ? "text-red-400 bg-red-500/10 animate-pulse" : "text-[#475569] hover:text-[#D9A02D]")}
-              >{listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}</button>
+
+          {/* ── CHAT AREA ── */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Header */}
+            <div className="mb-4">
+              <div className="text-center">
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#D9A02D]/20 bg-[#D9A02D]/5 mb-3">
+                  <Sparkles className="w-3 h-3 text-[#D9A02D]" />
+                  <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#D9A02D]">AI-Powered Legal Guidance</span>
+                </div>
+                <h2 className="font-display italic uppercase text-[#FAFAFA] text-3xl md:text-5xl leading-[0.95] mb-2">
+                  AI Legal Counsel
+                </h2>
+                <p className="font-body text-[13px] text-[#94A3B8] max-w-2xl mx-auto">
+                  Describe your legal situation in plain English. I'll analyze your case and deliver a verdict.
+                </p>
+              </div>
             </div>
-            <button onClick={() => sendMessage()} disabled={!input.trim() || streaming}
-              className="bg-[#D9A02D] hover:bg-[#D9A02D]/90 disabled:bg-[#1E293B] text-[#070B11] disabled:text-[#475569] px-5 py-3 rounded-xl transition-all duration-300 hover:shadow-[0_0_20px_rgba(217,160,45,0.15)] active:scale-95 disabled:shadow-none disabled:active:scale-100"
-            ><Send className="w-4 h-4" /></button>
-          </div>
-          <div className="max-w-3xl mx-auto flex items-center justify-between mt-2 px-1">
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-[9px] text-[#475569] uppercase tracking-wider">Premium</span>
-              <span className="font-mono text-[9px] text-[#475569]">{jurisdiction.split(",")[0]}</span>
+
+            {/* ── Evidence Table (glass surface) ── */}
+            <div className="relative glass-table rounded-2xl overflow-hidden shadow-[0_8px_40px_rgba(0,0,0,0.4)] flex-1 flex flex-col">
+              <RuleOcean active={!!lastAiMessage || isLoading} intensity={isLoading ? 0.8 : 0.4} />
+              {/* Space station ambient ring */}
+              {isLoading && (
+                <div className="absolute top-[20%] left-[5%] right-[5%] h-px bg-gradient-to-r from-transparent via-[#D9A02D]/15 to-transparent animate-station-pulse pointer-events-none z-10" />
+              )}
+              {/* Signal transmission line */}
+              {statusPhase === "submitting" && (
+                <div className="absolute top-0 left-0 w-full h-[2px] z-20 overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#D9A02D]/40 to-transparent animate-signal-travel" />
+                </div>
+              )}
+
+              {/* Processing Brain overlay with Puzzle Assembly */}
+              {showBrain && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#030303]/60 backdrop-blur-sm transition-opacity duration-500">
+                  <div className="text-center">
+                    <ProcessingBrain active={true} />
+                    {/* Puzzle pieces assembling */}
+                    <div className="mt-4 flex items-center justify-center gap-1.5">
+                      {puzzlePieces.map((_, i) => (
+                        <div
+                          key={i}
+                          className="animate-puzzle-slot w-5 h-5 rounded-sm border transition-all duration-500 flex items-center justify-center"
+                          style={{
+                            animationDelay: `${i * 0.3}s`,
+                            borderColor: i < 3 ? "rgba(217,160,45,0.4)" : i === 3 ? "rgba(217,160,45,0.6)" : "rgba(100,71,120,0.3)",
+                            backgroundColor: i < 3 ? "rgba(217,160,45,0.1)" : i === 3 ? "rgba(217,160,45,0.15)" : "transparent",
+                            opacity: i <= 3 ? 1 : 0.3,
+                          }}
+                        >
+                          <span className="text-[6px] text-[#D9A02D]/60">{i + 1}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {puzzlePieces.map((step, i) => (
+                        <div key={step} className="flex items-center justify-center gap-2">
+                          <div className={`w-1.5 h-1.5 rounded-full ${
+                            i < 2 ? "bg-[#D9A02D]" : i === 2 ? "bg-[#D9A02D] animate-pulse" : "bg-[#64748B]/30"
+                          }`} />
+                          <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-[#94A3B8]">{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Messages area */}
+              <div ref={chatRef} className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4"
+                style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(148,163,184,0.2) transparent" }}
+              >
+                {messages.length === 0 && !isLoading && (
+                  <>
+                    {/* Legal compass navigation */}
+                    <div className="flex items-center justify-center gap-4 mb-6">
+                      {["Rights", "Actions", "Risks", "Outcomes"].map((item) => (
+                        <div key={item} className="flex flex-col items-center gap-1">
+                          <div className="w-8 h-8 rounded-full border border-[#D9A02D]/10 bg-[#0F172A]/40 flex items-center justify-center group hover:border-[#D9A02D]/30 hover:bg-[#D9A02D]/5 transition-all duration-300 cursor-default">
+                            <span className="text-[10px] text-[#D9A02D]/40 group-hover:text-[#D9A02D]/70 transition-colors">
+                              {item === "Rights" ? "\u2696" : item === "Actions" ? "\uD83D\uDEE1\uFE0F" : item === "Risks" ? "\u26A0" : "\u2B50"}
+                            </span>
+                          </div>
+                          <span className="font-mono text-[7px] uppercase tracking-[0.15em] text-[#64748B]/50">{item}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Empty state */}
+                    <div className="text-center py-6">
+                      <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#D9A02D]/10 to-[#D9A02D]/5 border border-[#D9A02D]/15 flex items-center justify-center mx-auto mb-4">
+                        <Scale className="w-6 h-6 text-[#D9A02D]/60" />
+                      </div>
+                      <p className="font-body text-[14px] text-[#64748B] max-w-md mx-auto">
+                        Type your situation above, or pick an example to begin.
+                      </p>
+
+                      {/* Law building blocks */}
+                      <div className="mt-6 flex items-center justify-center gap-2 flex-wrap">
+                        {LAWS.map((law, i) => (
+                          <div
+                            key={law.name}
+                            className="animate-block-stack flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#94A3B8]/8 bg-[#0F172A]/30 hover:bg-[#0F172A]/60 hover:border-[#D9A02D]/20 transition-all duration-300 cursor-default"
+                            style={{ animationDelay: `${i * 0.1}s` }}
+                          >
+                            <span className="text-[11px]">{law.icon}</span>
+                            <span className="font-mono text-[8px] uppercase tracking-[0.1em] text-[#94A3B8]">{law.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {messages.map((msg) => (
+                  <div key={msg.id}>
+                    {msg.role === "user" ? (
+                      <div className="flex justify-end mb-3">
+                        <div className="max-w-[80%] bg-[#D9A02D]/10 border border-[#D9A02D]/20 rounded-xl px-4 py-2.5">
+                          <p className="font-body text-[14px] text-[#FAFAFA]">{msg.content}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mb-3">
+                        {/* AI response with scroll effect */}
+                        {msg.id === messages.filter(m => m.role === "assistant").pop()?.id && showScrollContent ? (
+                          <div className="bg-[#0F172A]/30 border border-[#94A3B8]/8 rounded-xl p-5">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#D9A02D] to-[#D4A843] flex items-center justify-center">
+                                <Scale className="w-3 h-3 text-[#030303]" />
+                              </div>
+                              <span className="font-body text-[12px] text-[#94A3B8] font-medium">AI Legal Counsel</span>
+                              <span className="font-mono text-[7px] uppercase tracking-[0.15em] text-emerald-400 ml-auto">Verdict Delivered</span>
+                            </div>
+                            <ScrollUnfold content={formatResponse(msg.content)} visible={true} />
+
+                            {/* Visualization mode bar */}
+                            <div className="mt-3 pt-3 border-t border-[#94A3B8]/6">
+                              <div className="flex items-center gap-1.5 mb-3 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                                {[
+                                  { id: "iceberg", icon: "\uD83E\uDDCA", label: "Iceberg" },
+                                  { id: "dna", icon: "\uD83E\uDDEC", label: "DNA" },
+                                  { id: "vortex", icon: "\U0001F300", label: "Vortex" },
+                                  { id: "dual", icon: "\uD83D\uDD0D", label: "Dual" },
+                                  { id: "bubble", icon: "\uD83E\uDD2B", label: "Bubbles" },
+                                  { id: "compass", icon: "\uD83E\uDDED", label: "Compass" },
+                                  { id: "chain", icon: "\uD83D\uDD17", label: "Chain" },
+                                  { id: "scale", icon: "\u2696", label: "Scale" },
+                                  { id: "planets", icon: "\uD83D\uDF08", label: "Planets" },
+                                  { id: "threads", icon: "\uD83E\uDDF5", label: "Weave" },
+                                  { id: "timeline", icon: "\u23F0", label: "Timeline" },
+                                  { id: "shadow", icon: "\uD83C\uDF19", label: "Shadow" },
+                                ].map(mode => (
+                                  <button
+                                    key={mode.id}
+                                    onClick={() => setVisMode(mode.id)}
+                                    className={`flex items-center gap-1 px-2 py-1 rounded-lg border transition-all duration-200 flex-shrink-0 ${
+                                      visMode === mode.id
+                                        ? "border-[#D9A02D]/40 bg-[#D9A02D]/10 text-[#D9A02D]"
+                                        : "border-[#94A3B8]/8 bg-[#0F172A]/30 text-[#64748B] hover:border-[#94A3B8]/20"
+                                    }`}
+                                  >
+                                    <span className="text-[9px]">{mode.icon}</span>
+                                    <span className="font-mono text-[7px] uppercase tracking-[0.1em]">{mode.label}</span>
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Active visualization */}
+                              <div className="bg-[#0F172A]/20 rounded-lg border border-[#94A3B8]/5 p-2 min-h-[80px]">
+                                {renderVisualization(visMode, msg.content, currentRiskText || lastUserMessage)}
+                              </div>
+                            </div>
+                          </div>
+                        ) : msg.id !== messages.filter(m => m.role === "assistant").pop()?.id ? (
+                          <div className="bg-[#0F172A]/30 border border-[#94A3B8]/8 rounded-xl p-5">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#D9A02D] to-[#D4A843] flex items-center justify-center">
+                                <Scale className="w-3 h-3 text-[#030303]" />
+                              </div>
+                              <span className="font-body text-[12px] text-[#94A3B8] font-medium">AI Legal Counsel</span>
+                            </div>
+                            <div className="font-body text-[14px] text-[#CBD5E1] leading-relaxed whitespace-pre-wrap"
+                              dangerouslySetInnerHTML={{ __html: formatResponse(msg.content) }}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Case Printer animation */}
+                {/* Loading message */}
+                {isLoading && !showBrain && (
+                  <div className="bg-[#0F172A]/30 border border-[#94A3B8]/8 rounded-xl p-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Loader2 className="w-4 h-4 text-[#D9A02D] animate-spin" />
+                      <span className="font-body text-[13px] text-[#94A3B8]">Processing your case...</span>
+                    </div>
+                    <div className="space-y-2">
+                      {["Reviewing the facts", "Checking relevant laws", "Evaluating precedents", "Synthesizing guidance"].map((step, i) => (
+                        <div key={step} className="flex items-center gap-2">
+                          <div className={`w-1.5 h-1.5 rounded-full ${
+                            i < 2 ? "bg-[#D9A02D]" : i === 2 ? "bg-[#D9A02D] animate-pulse" : "bg-[#64748B]/30"
+                          }`} />
+                          <span className={`font-body text-[11px] ${i <= 2 ? "text-[#94A3B8]" : "text-[#64748B]/50"}`}>{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {error && (
+                  <div className="flex items-start gap-2.5 bg-red-500/5 border border-red-500/20 rounded-xl p-4">
+                    <span className="text-red-400 mt-0.5 flex-shrink-0">\u26A0</span>
+                    <div>
+                      <p className="font-body text-[13px] text-red-300 font-medium">Something went wrong</p>
+                      <p className="font-body text-[12px] text-red-400/70 mt-0.5">{error}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── RISK METER & INPUT ── */}
+              <div className="border-t border-[#94A3B8]/8">
+                {/* Risk Meter */}
+                {(currentRiskText || isLoading) && (
+                  <div className="px-4 pt-3">
+                    <RiskMeter text={currentRiskText || lastUserMessage} analyzing={isLoading} />
+                  </div>
+                )}
+
+                {/* Input */}
+                <div className="p-4">
+                  <form onSubmit={handleSubmit} className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder="Describe your legal situation..."
+                      disabled={isLoading}
+                      className="flex-1 bg-[#0F172A]/60 border border-[#94A3B8]/15 rounded-xl px-5 py-3.5 text-[#FAFAFA] placeholder-[#64748B] font-body text-[14px] focus:outline-none focus:border-[#D9A02D]/40 focus:ring-1 focus:ring-[#D9A02D]/20 transition-all duration-300 disabled:opacity-40"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!input.trim() || isLoading}
+                      className="bg-[#D9A02D] hover:bg-[#D9A02D]/90 disabled:bg-[#D9A02D]/30 text-[#030303] p-3.5 rounded-xl transition-all duration-300 hover:shadow-[0_0_20px_rgba(217,160,45,0.2)] disabled:shadow-none"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </form>
+                </div>
+              </div>
             </div>
-            <span className="font-mono text-[9px] text-[#475569]">LexCore AI &middot; Not legal advice</span>
           </div>
+        </div>
+
+        {/* ── EXAMPLE CASES (shown when no messages) ── */}
+        {messages.length === 0 && !isLoading && (
+          <div className="mt-6 max-w-4xl mx-auto w-full">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#64748B] mb-3 text-center">Try an example case</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              {examples.map((ex) => (
+                <button
+                  key={ex.label}
+                  onClick={() => runAnalysis(ex.text)}
+                  disabled={isLoading}
+                  className="px-3 py-2.5 rounded-lg border border-[#94A3B8]/10 bg-[#0F172A]/40 hover:bg-[#0F172A]/80 hover:border-[#94A3B8]/25 text-left transition-all duration-200 disabled:opacity-40 text-center"
+                >
+                  <span className="font-body text-[11px] text-[#94A3B8] leading-snug">{ex.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── FOOTER BACK LINK ── */}
+        <div className="text-center mt-6">
+          <Link to="/" className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#FAFAFA] font-mono text-[10px] uppercase tracking-[0.2em] transition-colors">
+            <ArrowLeft className="w-3 h-3" />
+            Back to Home
+          </Link>
         </div>
       </div>
     </div>
